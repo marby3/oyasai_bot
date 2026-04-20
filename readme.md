@@ -18,8 +18,8 @@
 このNameには「DISCORD_WEBHOOK_URL」と、SecretにはDiscord編にて取得したDicord webhookを記載してください。
 
 ### Actionsの実行
-画面上部の「Actions」から、「New workflow」を選びます。
-その後、「set up a workflow Yourself」をクリックし、以下のコードを貼り付けて「Commit Changes」をしてください。
+画面上部の「Actions」から、「Check MAFF Vegetable」を選びます。
+その後、「Run workflow」を選択し、実行します。
 
 ## 完了！
 その他の細かい操作はいい感じにやってください。
