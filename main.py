@@ -1,5 +1,6 @@
 import os
 import requests
+import re
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
@@ -10,48 +11,44 @@ def run():
     soup = BeautifulSoup(response.text, 'html.parser')
 
     # 1. テキスト情報の抽出
-    # main_content配下をまるごと取得し、改行で区切ってリスト化します
     main_content = soup.find("div", id="main_content")
     
-    # 全テキストを取得し、お買い得という文字が含まれる行だけを抽出・整形
-    lines = main_content.get_text(separator="\n").splitlines()
-    veggie_list = []
+    # タグの間にスペースを入れて全テキストを取得（野菜名の分離を防ぐ）
+    full_text = main_content.get_text(separator=" ", strip=True)
     
-    for line in lines:
-        clean_line = line.strip()
-        # 「お買い得」というキーワードが含まれる行をピックアップ
-        if "お買い得" in clean_line:
-            # 前後の行（野菜名など）が分離している場合があるため、
-            # 「今週は」から始まる文や、特定のフレーズを補足するロジック
-            veggie_list.append(clean_line)
-
-    # 重複を削除しつつ、見やすく結合
-    # (農水省のサイト構造上、同じ文言が複数回ヒットすることがあるため)
-    unique_veggies = []
-    for v in veggie_list:
-        if v not in unique_veggies:
-            unique_veggies.append(v)
+    # 正規表現で「今週は」〜「お買い得となっております！」の範囲を抽出
+    # ※「大変お買い得」と「もお買い得」の2文が含まれるようにします
+    pattern = r"(今週は.*?となっております！)"
+    matches = re.findall(pattern, full_text)
     
-    veggie_msg = "\n".join(unique_veggies)
+    if matches:
+        # 抽出した文を結合し、余分な空白を詰めて読みやすく整形
+        veggie_msg = "\n".join(matches)
+        veggie_msg = re.sub(r' +', ' ', veggie_msg) # 連続するスペースを1つに
+        veggie_msg = veggie_msg.replace("！ ", "！\n") # 句切れで改行
+    else:
+        veggie_msg = "今週のお買い得野菜の情報が見つかりました。"
 
-    # 2. テーブル画像の取得（前回同様）
+    # 2. テーブル画像の取得
     img_tag = soup.find("img", alt=lambda x: x and "価格表" in x)
     img_url = urljoin(url, img_tag["src"]) if img_tag else None
 
     # 3. Discordに送信
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
     if webhook_url:
-        # メッセージ本文を構成
-        # もしテキスト抽出に失敗したときのために、デフォルト文を用意
-        display_text = veggie_msg if veggie_msg else "今週のお買い得野菜が更新されました！"
-        
-        content = f"**【農林水産省：今週のお手頃野菜】**\n\n{display_text}\n\n詳細はコチラ: {url}"
+        # メッセージの組み立て
+        content = (
+            f"**【農林水産省：今週のお手頃野菜】**\n\n"
+            f"{veggie_msg}\n\n"
+            f"詳細はコチラ: {url}"
+        )
         
         payload = {"content": content}
         
         if img_url:
             img_data = requests.get(img_url).content
             files = {"file": ("table.jpg", img_data)}
+            # テキストと画像を同時に送信
             requests.post(webhook_url, data=payload, files=files)
         else:
             requests.post(webhook_url, json=payload)
